@@ -239,7 +239,7 @@ for file in *.readcount.txt.gz; do
   }'
 done >> all.counts.tsv
 
-##binomial test for allelic imbalance
+##binomial test for allelic imbalance and generation of filter table
 Rscript --no-save binom.test
 
 # Load data
@@ -274,6 +274,7 @@ write.table(df[, c("scaffold", "position")],
 
 sort imbalanced.sites.txt > imbalanced.sites.sort.txt
 
+##filter mafs and beagle file for loci with systemic allele balance issues
 zcat skno.new.mafs.gz | awk 'NR==FNR {bad[$1":"$2]; next} !($1":"$2 in bad)' imbalanced.sites.sort.txt - | gzip > skno.new.imb.mafs.gz
 
 
