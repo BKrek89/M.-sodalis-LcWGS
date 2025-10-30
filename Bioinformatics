@@ -166,3 +166,76 @@ for f in `ls -1 *.sorted.prop.dups.bam | sed 's/.sorted.prop.dups.bam//' `
 do
 samtools index ${f}.sorted.prop.dups.bam -@ 20
 done
+
+
+#######################################################
+########variant call/post-variant filtering############
+#######################################################
+
+##call variants for all samples with ANGSD. skno.new.filelist is a list of all bam files to be included in call.
+
+angsd -bam skno.new.filelist -nThreads 20 -doGLF 2 -GL 1 -doMajorMinor 1 -doMaf 1 -doCounts 1 -doPost 1 -minMapQ 30 -minQ 20 -SNP_pval 1e-6 -minMaf 0.05 -minInd 123 -setMaxDepth 2460 -out skno.new
+
+
+
+#####filter for allele balance based on Pinsky et al., 2021
+#keep only first 4 columns
+cut -f1-4 skno.new.mafs > skno.new.mafs.sites.txt
+
+#remove header
+tail -n+2 skno.new.mafs.sites.txt > skno.new.mafs.sites1.txt
+
+#create bed file
+awk '{OFS="\t"; print $1, $2-1, $2}' skno.new.sites1.sorted.txt > skno.new.sites.bed
+
+# Set paths
+REFERENCE="mylu.genome.rm.gmap.k100.fa"
+POSITIONS="/sodalis/SNP4/skno.new.sites.bed"
+
+# Create output directory
+mkdir -p out.bamreadcount
+
+# Export variables so they are available in parallel subshells
+export REFERENCE
+export POSITIONS
+
+
+# Define the function and get read counts per locus with bam-readcount
+run_readcount() {
+  BAM="$1"
+  SAMPLE=$(basename "$BAM" .dups.bam)
+  echo "Processing $SAMPLE..."
+  bam-readcount -f "$REFERENCE" -l "$POSITIONS" "$BAM" > "out.bamreadcount/${SAMPLE}.readcount.txt"
+}
+
+export -f run_readcount
+
+# Run in parallel across all .dups.bam files, 20 at a time
+parallel --compress -j 20 run_readcount ::: *.dups.bam
+
+#concatenate files; chatgpt assist
+# Header
+echo -e "scaffold\tposition\tallele1_count\tallele2_count" > all.counts.tsv
+
+# Loop through gzipped readcount files
+for file in *.readcount.txt.gz; do
+  zcat "$file" | awk -v sample="$file" '
+  {
+    split($5, a1, ":"); split($6, a2, ":");
+    a1c = a1[2]; a2c = a2[2];
+    total = a1c + a2c;
+    # Define heterozygote: both alleles present with >5 reads each (adjust as needed)
+    if (a1c > 5 && a2c > 5) {
+      key = $1"\t"$2;
+      hets[key]["a1"] += a1c;
+      hets[key]["a2"] += a2c;
+    }
+  }
+  END {
+    for (k in hets) {
+      split(k, loc, "\t");
+      print loc[1]"\t"loc[2]"\t"hets[k]["a1"]"\t"hets[k]["a2"];
+    }
+  }'
+done >> all.counts.tsv
+
