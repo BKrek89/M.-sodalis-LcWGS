@@ -1,0 +1,13 @@
+##PCA After recalling SNPs on datasets with 75% and 25% missingness thresholds. example with 75m
+
+python3 /home/rek89/miniconda3/pkgs/pcangsd-0.98.2-py36h39e3cac_1/pcangsd/pcangsd.py -threads 20 -beagle skno.new.imb.75m.beagle.gz -selection -o skno.75m.imb
+
+##graph in R
+
+
+
+
+##remove outliers and recall SNPs then rerun PCA as needed
+
+
+##admixture analysis
