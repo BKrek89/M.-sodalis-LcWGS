@@ -239,3 +239,43 @@ for file in *.readcount.txt.gz; do
   }'
 done >> all.counts.tsv
 
+##binomial test for allelic imbalance
+Rscript --no-save binom.test
+
+# Load data
+df <- read.table("all.counts.tsv", header = TRUE, sep = "\t")
+
+# Total reads at each locus
+df$total_count <- df$allele1_count + df$allele2_count
+
+# Run binomial test for each locus (H0: p = 0.5 expected balance)
+# If reference/alternate allele bias exists, this test will catch it
+binom_results <- apply(df, 1, function(row) {
+  binom.test(x = as.numeric(row["allele1_count"]),
+             n = as.numeric(row["total_count"]),
+             p = 0.5)$p.value
+})
+
+# Add p-values to dataframe
+df$p_value <- binom_results
+
+# FDR correction
+df$fdr <- p.adjust(df$p_value, method = "fdr")
+
+# Filter for loci with FDR < 0.05
+significant <- df[df$fdr < 0.05, c("scaffold", "position", "allele1_count", "allele2_count", "p_value", "fdr")]
+
+# Save results
+write.table(significant, file = "imbalanced.loci.tsv", sep = "\t", quote = FALSE, row.names = FALSE)
+df <- read.table("imbalanced.loci.tsv", header = TRUE)
+write.table(df[, c("scaffold", "position")],
+            file = "imbalanced.sites.txt",
+            sep = "\t", quote = FALSE, row.names = FALSE, col.names = FALSE)
+
+sort imbalanced.sites.txt > imbalanced.sites.sort.txt
+
+zcat skno.new.mafs.gz | awk 'NR==FNR {bad[$1":"$2]; next} !($1":"$2 in bad)' imbalanced.sites.sort.txt - | gzip > skno.new.imb.mafs.gz
+
+
+zcat skno.new.beagle.gz | awk 'FNR==NR {bad[$1"_"$2]; next}
+    NR==1 || !( $1 in bad )' imbalanced.sites.sort.txt - | gzip > skno.new.imb.beagle.gz
