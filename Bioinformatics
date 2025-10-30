@@ -1,0 +1,82 @@
+
+#################################
+#####pre-variant filtering ######
+#################################
+
+##filter optical duplicates with bbtools clumpify
+
+for f in `ls -1 *_001.fastq.gz | sed 's/_R[1,2]_001.fastq.gz//' `
+do
+clumpify.sh in1=${f}_R1_001.fastq.gz in2=${f}_R2_001.fastq.gz out1=${f}_R1.uni.fastq.gz out2=${f}_R2.uni.fastq.gz dedupe optical dupedist=1200
+done
+
+
+##filter for quality and remove adapters with TRIMMOMATIC. nextadapt.fa is a file containing Illumina adapter sequences
+for f in `ls -1 *.uni.fastq.gz | sed 's/_R[1,2].uni.fastq.gz//' `
+do
+trimmomatic PE -threads 4 -phred33 ${f}_R1.uni.fastq.gz ${f}_R2.uni.fastq.gz \
+${f}.R1.uni.trim.fastq.gz ${f}.R1.uni.untrim.fastq.gz \
+${f}.R2.uni.trim.fastq.gz ${f}.R2.uni.untrim.fastq.gz \
+ILLUMINACLIP:nextadapt.fa:2:30:10:8:TRUE LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15 MINLEN:30
+done
+
+
+##filter contaminant reads with fastqscreen. fastq_screen.conf.alt contains paths to indexed genomes from potential contaminants from genbank
+
+OMP_NUM_THREADS=12
+srun python fastq_script.py
+
+import os
+from os.path import exists
+import csv
+import time
+
+startVar = 0
+
+if exists('restart.in'):
+     with open('restart.in','r') as ioText:
+         startVar = int(ioText.readlines()[0].strip())+1
+     print("Start value is ",str(startVar))
+     time.sleep(5)
+
+file_array = []
+with open('filelist.txt', 'r') as iowrapper:
+    csvreader = csv.reader(iowrapper, delimiter=',')
+    for row in csvreader:
+        file_array.append(row[0])
+
+for i in range(startVar,100):
+    filebase = file_array[i]
+    os.system(f"fastq_screen --threads 12 --subset 0 --conf /miniconda3/share/fastq-screen-0.14.0-0/fastq_screen.conf.alt --tag --filter 00000000000000000000 --force --aligner B$
+    print(i)
+    # write i into restart file
+    with open('restart.in','w') as iowrapper:
+        iowrapper.write(str(i))
+
+
+##remove pairs for which the mate was filtered out with bbtools
+for f in `ls -1 *.uni.trim.tagged_filter.fastq.gz | sed 's/.R[1,2].uni.trim.tagged_filter.fastq.gz//' `
+do
+repair.sh in=${f}.R1.uni.trim.tagged_filter.fastq.gz in2=${f}.R2.uni.trim.tagged_filter.fastq.gz out=${f}.R1.uni.repair.tagged_filter.fastq.gz out2=${f}.R2.uni.repair.tagged_filter.fastq.gz
+done
+
+
+##filter polyg tails with cutadapt
+for f in `ls -1 *.uni.repair.tagged_filter.fastq.gz | sed 's/.R[1,2].uni.repair.tagged_filter.fastq.gz//' `
+do
+cutadapt -j 12 -a "G{10}" -A "G{10}" \
+         -o ${f}.R1.uni.repair.filter.g.fastq.gz -p ${f}.R2.uni.repair.filter.g.fastq.gz \
+         ${f}.R1.uni.repair.tagged_filter.fastq.gz ${f}.R2.uni.repair.tagged_filter.fastq.gz
+done
+
+
+##kmer filter low variation reads with bbtools
+for f in `ls -1 *.uni.repair.filter.g.fastq.gz | sed 's/.R[1,2].uni.repair.filter.g.fastq.gz//' `
+do
+bbduk.sh in1=${f}.R1.uni.repair.filter.g.fastq.gz in2=${f}.R2.uni.repair.filter.g.fastq.gz \
+         out1=${f}.R1.uni.repair.filter.g.kmer.fastq.gz out2=${f}.R2.uni.repair.filter.g.kmer.fastq.gz \
+         entropy=0.5 entropywindow=50 entropyk=5 \
+         stats=${f}.bbduk_entropy_stats.txt \
+         threads=12
+done
+
