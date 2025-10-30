@@ -280,3 +280,46 @@ zcat skno.new.mafs.gz | awk 'NR==FNR {bad[$1":"$2]; next} !($1":"$2 in bad)' imb
 
 zcat skno.new.beagle.gz | awk 'FNR==NR {bad[$1"_"$2]; next}
     NR==1 || !( $1 in bad )' imbalanced.sites.sort.txt - | gzip > skno.new.imb.beagle.gz
+
+###Missingness. Count proportion of "0.3333333" calls in a beagle file. chatgpt assist
+# Path to BEAGLE file (plain text)
+BEAGLE_FILE="skno.new.imb.beagle"  # <-- Replace with your actual file name
+
+# Output file
+OUTPUT_FILE="skno.new.missingness_summary.imb.tsv"
+
+awk -v out="$OUTPUT_FILE" '
+BEGIN {
+  FS=OFS="\t"
+}
+NR==1 {
+  # Header: extract sample names (every 3rd column starting from column 4)
+  for (i=4; i<=NF; i+=3) {
+    sample[++s] = $i
+    miss[$i] = 0
+  }
+  next
+}
+{
+  total++
+  idx = 0
+  for (i=4; i<=NF; i+=3) {
+    idx++
+    a = $(i) + 0
+    b = $(i+1) + 0
+    c = $(i+2) + 0
+    # Count as missing if all three values are exactly 0.333333
+    if (a == 0.333333 && b == 0.333333 && c == 0.333333) {
+      miss[sample[idx]]++
+    }
+  }
+}
+END {
+  print "Sample", "MissingSites", "TotalSites", "MissingRate" > out
+  for (i=1; i<=s; i++) {
+    name = sample[i]
+    rate = miss[name] / total
+    print name, miss[name], total, rate > out
+  }
+  print "Wrote output to " out > "/dev/stderr"
+}' "$BEAGLE_FILE"
