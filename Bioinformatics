@@ -21,7 +21,7 @@ ILLUMINACLIP:nextadapt.fa:2:30:10:8:TRUE LEADING:3 TRAILING:3 SLIDINGWINDOW:4:15
 done
 
 
-##filter contaminant reads with fastqscreen. fastq_screen.conf.alt contains paths to indexed genomes from potential contaminants from genbank
+##filter contaminant reads with fastqscreen. fastq_screen.conf.alt contains paths to indexed genomes from potential contaminants from genbank. command imbedded within python script allowing restart from last completed sample
 
 OMP_NUM_THREADS=12
 srun python fastq_script.py
@@ -80,3 +80,89 @@ bbduk.sh in1=${f}.R1.uni.repair.filter.g.fastq.gz in2=${f}.R2.uni.repair.filter.
          threads=12
 done
 
+##align reads to Myo_luc2.0 genome using bwa. command imbedded within python script to allow restart from last completed sample after interuption. mylu.rm.bwa is the indexed genome
+OMP_NUM_THREADS=20
+srun python bwa_script.new.py
+
+import os
+from os.path import exists
+import csv
+import time
+
+startVar = 0
+
+if exists('restart.bwa.x.in'):
+     with open('restart.bwa.x.in','r') as ioText:
+         startVar = int(ioText.readlines()[0].strip())+1
+     print("Start value is ",str(startVar))
+     time.sleep(5)
+
+file_array = []
+with open('filelist.txt', 'r') as iowrapper:
+    csvreader = csv.reader(iowrapper, delimiter=',')
+    for row in csvreader:
+        file_array.append(row[0])
+
+for i in range(startVar,70):
+    filebase = file_array[i]
+    os.system(f"bwa mem -t 20 -T 40 -L 500 -B 16 -M mylu.rm.bwa {filebase}.R1.uni.repair.filter.g.kmer.fastq.gz {filebase}.R2.uni.repair.filter.g.kmer.fastq.gz > $
+    print(i)
+    # write i into restart file
+    with open('restart.bwa.x.in','w') as iowrapper:
+        iowrapper.write(str(i))
+
+
+##convert sam files to bam files with samtools
+for f in `ls -1 *.sam | sed 's/.sam//' `
+do
+samtools view -@ 20 -bS ${f}.sam > ${f}.bam
+done
+
+
+##sort bam files with samtools
+for f in `ls -1 *.bam | sed 's/.bam//' `
+do
+samtools sort ${f}.bam -@ 20 -o ${f}.sorted.bam
+done
+
+
+##remove improperly paired reads with samtools
+for f in `ls -1 *.sorted.bam | sed 's/.sorted.bam//' `
+do
+samtools view -b -f 0x2 ${f}.sorted.bam -@ 20 > ${f}.sorted.prop.bam
+done
+
+
+##analyze data with samtools flagstat
+for f in `ls -1 *.prop.bam | sed 's/.prop.bam//' `
+do
+samtools flagstat ${f}.prop.bam -@ 20 > outputfiles/${f}.prop.out.flag
+done
+
+
+##filter duplicates with picard
+for f in `ls -1 *.sorted.prop.bam | sed 's/.sorted.prop.bam//' `
+do
+picard -Xmx100g MarkDuplicates \
+      REMOVE_DUPLICATES=true \
+      I=${f}.sorted.prop.bam \
+      O=${f}.sorted.prop.dups.bam \
+      M=${f}.marked_dup_metrics.txt
+done
+
+
+##calculate coverage metrics with picard
+for f in `ls -1 *.dups.bam | sed 's/.dups.bam//' `
+do
+picard -Xmx100g CollectWgsMetrics \
+      I=${f}.dups.bam \
+      O=${f}.coverage.txt \
+      R=/scratch/rek89/genome/mylu.genome.rm.gmap.k100.fa
+done
+
+
+##index with samtools
+for f in `ls -1 *.sorted.prop.dups.bam | sed 's/.sorted.prop.dups.bam//' `
+do
+samtools index ${f}.sorted.prop.dups.bam -@ 20
+done
