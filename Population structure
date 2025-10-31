@@ -1,4 +1,4 @@
-##PCA After recalling SNPs on datasets with 75% and 25% missingness thresholds. example with 75m
+##########################################PCA After recalling SNPs on datasets with 75% and 25% missingness thresholds. example with 75m
 
 python3 /home/rek89/miniconda3/pkgs/pcangsd-0.98.2-py36h39e3cac_1/pcangsd/pcangsd.py -threads 20 -beagle skno.new.imb.75m.beagle.gz -selection -o skno.75m.imb
 
@@ -120,3 +120,23 @@ abline(
   lwd = 1.2
 )
 
+
+
+######################Fst between states in each time period
+#create site file for population level calls
+cut -f1-4 skno.new.imb.mafs > skno.new.imb.mafs.sites.txt
+tail -n+2 skno.new.imb.mafs.sites.txt > skno.new.imb.mafs.sites1.txt
+sort -k1 skno.new.imb.mafs.sites1.txt > skno.new.imb.sites1.sorted.txt
+angsd sites index skno.new.imb.sites1.sorted.txt
+cut -f1 skno.new.imb.sites1.sorted.txt |sort|uniq > chrs.imb.txt
+
+#call variants in each population with -dosaf
+for POP in AR_B MO_B NJ_B NY_B; do echo $POP;/local/opt/angsd/angsd -b "$POP".75m.imb.pco.txt -nThreads 20 -anc /local/home/robertk/sodalis/sodalisa1/genome/mylu.genome.rm.gmap.k100.fa 
+-GL 1 -dosaf 1 -minMapQ 30 -minQ 20 -rf /local/home/robertk/sodalis/sodalisa1/sites/chrs.imb.txt -sites /local/home/robertk/sodalis/sodalisa1/sites/skno.new.imb.sites1.sorted.txt 
+-out /local/home/robertk/sodalis/sodalisa1/safnok/75m/"$POP"_75m_fst; done
+
+#calculate genome-wide Fst for each pair of states in each time period
+/local/opt/angsd/misc/realSFS fst index /local/home/robertk/sodalis/sodalisa1/safnok/25m/AR_A_25m_fst.saf.idx /local/home/robertk/sodalis/sodalisa1/safnok/25m/MO_A_25m_fst.saf.idx 
+-sfs ARMO_A.25m.fst.sum.ml -fstout ARMO_A.25m.fstd
+
+/local/opt/angsd/misc/realSFS fst stats ARMO_A.25m.fstd.fst.idx
