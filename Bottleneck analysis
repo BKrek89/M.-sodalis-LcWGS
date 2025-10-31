@@ -1,0 +1,76 @@
+#####################construction of site frequency spectra
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do
+  echo $POP
+  /local/opt/angsd/angsd \
+    -bam "$POP".25m.imb.pco3.txt \
+    -out /local/home/robertk/sodalis/sodalisa1/sfs/"$POP".25m.imb.sfs \
+    -doSaf 1 \
+    -anc /local/home/robertk/sodalis/sodalisa1/genome/mylu.genome.rm.gmap.k100.fa \
+    -GL 1 \
+    -minMapQ 30 -minQ 20 \
+    -minInd 10 \
+    -doMajorMinor 1 \
+    -P 8
+done
+
+for POP in AR_A AR_B MO_A MO_B NJ_A NJ_B NY_A NY_B; do echo $POP
+/local/opt/angsd/misc/realSFS "$POP".25m.imb.sfs.saf.idx -P 8 > "$POP".25m.sfs; done
+
+##plot sfs in R
+library(ggplot2)
+library(dplyr)
+library(patchwork)   # for side-by-side plots
+
+read_sfs <- function(file, bin_edges) {
+  sfs <- scan(file)
+  n <- length(sfs) - 1
+  
+  sfs_poly <- sfs[2:n]        # Exclude monomorphic bins
+  sfs_prop <- sfs_poly / sum(sfs_poly)
+  allele_freqs <- (1:(n-1)) / n
+  
+  df <- data.frame(freq = allele_freqs, observed = sfs_prop)
+  
+  # Bin into common edges
+  df <- df %>%
+    mutate(bin = cut(freq, breaks = bin_edges, include.lowest = TRUE, right = FALSE)) %>%
+    group_by(bin) %>%
+    summarise(observed = sum(observed), .groups = "drop")
+  
+  df$file <- file
+  return(df)
+}
+
+# Common bins
+bin_edges <- seq(0, 1, by = 0.05)
+
+# Read both SFS
+df1 <- read_sfs("all_B.75m.sfs", bin_edges)
+df2 <- read_sfs("all_A.75m.sfs", bin_edges)
+
+# --- Get max y so both share the same limit ---
+ymax <- max(c(df1$observed, df2$observed))
+
+# Plot 1
+p1 <- ggplot(df1, aes(x = bin, y = observed)) +
+  geom_bar(stat = "identity", fill = "skyblue", alpha = 0.7) +
+  labs(x = "Derived allele frequency", y = "Proportion", title = "Pre-WNS") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, ymax)
+
+# Plot 2
+p2 <- ggplot(df2, aes(x = bin, y = observed)) +
+  geom_bar(stat = "identity", fill = "royalblue", alpha = 0.7) +
+  labs(x = "Derived allele frequency", y = "Proportion", title = "Post-WNS") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylim(0, ymax)
+
+# Side by side, shared y axis alignment
+combined <- p1 + p2 & theme(axis.title.y = element_blank()) # remove duplicate y-label on right
+ggsave("all.75m.sfsplot.png", combined, width = 12, height = 6, dpi = 300)
+
+
+
+##############################################average genome-wide Tajima's D
