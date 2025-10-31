@@ -3,11 +3,120 @@
 python3 /home/rek89/miniconda3/pkgs/pcangsd-0.98.2-py36h39e3cac_1/pcangsd/pcangsd.py -threads 20 -beagle skno.new.imb.75m.beagle.gz -selection -o skno.75m.imb
 
 ##graph in R
+library(RcppCNPy)
+library(readxl)
+library(dplyr)
+C <- as.matrix(skno.25m)
+e <- eigen(C)
+matrix <- e$values
+values <- as.data.frame(matrix)
+scores <- as.data.frame(e$vectors)
+sum(as.matrix)
+3.225772/307.3795
+1.163201/307.3795
 
-
-
-
+plot(e$vectors[,1:2],col=sodpop_25m$color, pch=sodpop_25m$shape, xlab="PC1",ylab="PC2", main="individual allele frequency")
 ##remove outliers and recall SNPs then rerun PCA as needed
 
 
-##admixture analysis
+##################admixture analysis. After removing PCA outliers
+
+##optimal value of K. 
+#Run ngsadmix in 5 replicates for each value of K
+for i in {1..5};
+do
+NGSadmix -likes /projects/f_deenr_1/bobbyK/sodalis/popmiss/skno.new.imb.75m.beagle.gz -K 1 -o skno.75m.pco."$i".ad1 -P 20;
+done
+
+#concatenate NGSadmix output files
+OMP_NUM_THREADS=20
+srun python admixfile.py
+
+from os import listdir, path
+import re
+o=open('All_Admix_loglike.75m.pco.csv', 'w')
+
+for i in range(1,6):
+        for j in range(1,9):
+            f = open('skno.75m.pco.{}.ad{}.log'.format(i,j), 'r')
+            lines = f.readlines()
+            #print len(lines)
+            last = lines[8]
+            data = re.split('=|a',last, 3)
+            like = data[1]
+            likeNum = "{},{},{}\n".format(i, j, like)
+            o.write(likeNum)
+
+#in R. From Gignoux-Wolfsohn et al., 2021
+meanlikes= do.call(data.frame, aggregate(. ~ kvalue, data = All_Admix_loglike_75m_pco[-2], FUN = function(x) c(av = mean(x), stdev = sd(x) ) ) ) 
+
+
+meanlikes
+
+meanlikes$Dk<-NA
+meanlikes$Lpk<-NA
+meanlikes$Lpk.s<-NA
+meanlikes$Lppk<-NA
+meanlikes$Lpk.s<-NA
+
+for (k in 2:NROW(meanlikes)){
+  
+  meanlikes$Dk[k] = abs(meanlikes$loglike.av[k+1]-2*(meanlikes$loglike.av[k])+meanlikes$loglike.av[k-1])/meanlikes$loglike.stdev[k]    
+}
+meanlikes$loglike.av[3]
+
+
+for (k in 2:NROW(meanlikes)){
+  
+  meanlikes$Lpk[k] = meanlikes$loglike.av[k]-(meanlikes$loglike.av[k-1]) 
+  meanlikes$Lpk.s[k]=meanlikes$loglike.stdev[k]-(meanlikes$loglike.stdev[k-1])
+}
+
+for (k in 2:NROW(meanlikes)){ 
+  meanlikes$Lppk[k] = abs(meanlikes$Lpk[k+1]-(meanlikes$Lpk[k]))
+  meanlikes$Lppk.s[k] = abs(meanlikes$Lpk.s[k+1]-(meanlikes$Lpk.s[k]))
+}
+
+for (k in 2:NROW(meanlikes)){ 
+  meanlikes$Dk[k] = abs(meanlikes$Lppk[k]/meanlikes$loglike.stdev[k])   
+}
+
+with(meanlikes, plot(kvalue, loglike.av))
+with(meanlikes, arrows(kvalue, loglike.av-loglike.stdev, kvalue, loglike.av+loglike.stdev, length=0.05, angle=90, code=3))
+
+with(meanlikes, plot(kvalue, Lpk))
+with(meanlikes, arrows(kvalue, Lpk-Lpk.s, kvalue, Lpk+Lpk.s, length=0.05, angle=90, code=3))
+
+with(meanlikes, plot(kvalue, Lppk))
+with(meanlikes, arrows(kvalue, Lppk-Lppk.s, kvalue, Lppk+Lppk.s, length=0.05, angle=90, code=3))
+
+with(meanlikes, plot(kvalue, Dk))
+
+##take first replicate from admix analysis with best K value based on the loglike, Lpk, Lppk, and DK plots. Graph in R. From Gignoux-Wolfsohn et al., 2021 and NGSadmix manual
+# read population labels and estimated admixture proportions
+pop<-as.matrix(sodpop_75m_pco)
+pop<-as.table(pop)
+
+q <- skno.75m.pco.1.ad2
+
+ord <- order(pop[, "state-wns"])
+
+barplot(t(q)[, ord], col=2:10, space=0, border=NA,
+        xlab="Individuals", ylab="Admixture proportions for K=2")
+
+# Add population group labels based on state-wns
+text(
+  tapply(seq_len(nrow(pop)), pop[ord, "state-wns"], mean),
+  -0.05,
+  unique(pop[ord, "state-wns"]),
+  xpd = TRUE
+)
+
+# Add vertical lines between state-wns groups
+abline(
+  v = cumsum(sapply(unique(pop[ord, "state-wns"]),
+                    function(x) sum(pop[ord, "state-wns"] == x))),
+  col = 1,
+  lwd = 1.2
+)
+
