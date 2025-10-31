@@ -74,3 +74,252 @@ ggsave("all.75m.sfsplot.png", combined, width = 12, height = 6, dpi = 300)
 
 
 ##############################################average genome-wide Tajima's D
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do echo $POP; /local/opt/angsd/misc/realSFS 
+saf2theta /local/home/robertk/sodalis/sodalisa1/sfs/"$POP".25m.imb.sfs.saf.idx -sfs  "$POP".25m.sfs -outname "$POP".25m.theta; done
+
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do echo $POP; /local/opt/angsd/misc/thetaStat do_stat "$POP".25m.theta.thetas.idx -nChr 10333 -outnames "$POP".25m.theta.thetas.idx2; done
+
+awk 'BEGIN{FS=OFS=" "} { sum += $9 } END { if (NR > 0) print sum / NR }' AR_A.25m.theta.thetas.idx2.pestPG
+
+awk 'NR > 1 {sum += $9; sumsq += ($9)^2; n++} END {mean = sum/n; sem = sqrt((sumsq - sum^2/n)/(n*(n-1))); print "Mean:", mean, "SEM:", sem}' AR_A.25m.theta.thetas.idx2.pestPG
+
+awk 'NR>1 {x=$9; sum+=x; sumsq+=x*x; n++}
+     END {
+       mean = sum/n
+       sd = sqrt((sumsq - n*mean*mean)/(n-1))
+       sem = sd/sqrt(n)
+       z = 1.96
+       lower = mean - z*sem
+       upper = mean + z*sem
+       printf "n=%d\nMean=%.6f\nSD=%.6f\nSEM=%.6f\n95%% CI (approx z): [%.6f, %.6f]\n", n, mean, sd, sem, lower, upper
+     }' AR_A.25m.theta.thetas.idx2.pestPG
+
+
+###########################################Linkage disequilibrium decay
+for POP in AR_A AR_B MO_A MO_B NJ_A NJ_B NY_A NY_B; do echo $POP;/local/opt/angsd/angsd -b "$POP".25m.imb.pco3.txt -doGLF 2 -doPost 1 -dogeno 2 -GL 1 -doMajorMinor 3 
+-doMaf 11 -doCounts 1 -minQ 20 -minMapQ 30 -P 8 -rf /local/home/robertk/sodalis/sodalisa1/sites/chrs.imb.txt 
+-sites /local/home/robertk/sodalis/sodalisa1/sites/skno.new.imb.sites1.sorted.txt -out /local/home/robertk/sodalis/sodalisa1/LDnok/"$POP".25m.ld; done
+
+for POP in AR_A.25m AR_B.25m MO_A.25m MO_B.25m NJ_A.25m NJ_B.25m NY_A.25m NY_B.25m AR_A.75m AR_B.75m MO_A.75m MO_B.75m NJ_A.75m NJ_B.75m NY_A.75m NY_B.75m; 
+do echo $POP; zcat "$POP".ld.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > "$POP".pos.gz; done
+
+gunzip *pos.gz
+
+for POP in AR_A.25m AR_B.25m MO_A.25m MO_B.25m NJ_A.25m NJ_B.25m NY_A.25m NY_B.25m AR_A.75m AR_B.75m MO_A.75m MO_B.75m NJ_A.75m NJ_B.75m NY_A.75m NY_B.75m;
+do echo $POP; tail -n +2 "$POP".pos > "$POP".nh.pos; done
+
+gzip *pos
+
+for POP in AR_A.25m AR_B.25m MO_A.25m MO_B.25m NJ_A.25m NJ_B.25m NY_A.25m NY_B.25m \
+           AR_A.75m AR_B.75m MO_A.75m MO_B.75m NJ_A.75m NJ_B.75m NY_A.75m NY_B.75m
+do
+    sitesall[$POP]=$(zcat "$POP.nh.pos.gz" | wc -l)
+done
+
+for POP in "${!sitesall[@]}"; do
+    echo "Running ngsLD for $POP with ${sitesall[$POP]} sites"
+
+    # choose the correct file for counting individuals
+    if [[ $POP == *.25m ]]; then
+        n_ind=$(wc -l < /local/home/robertk/sodalis/sodalisa1/bams/"$POP.imb.pco3.txt")
+    elif [[ $POP == *.75m ]]; then
+        n_ind=$(wc -l < /local/home/robertk/sodalis/sodalisa1/bams/"$POP.imb.pco.txt")
+    else
+        echo "Warning: $POP does not match expected pattern (.25m or .75m)"
+        continue
+    fi
+
+    /local/opt/ngsLD/ngsLD \
+        --geno "$POP.ld.beagle.gz" \
+        --probs \
+        --n_ind "$n_ind" \
+        --n_sites "${sitesall[$POP]}" \
+        --pos "$POP.nh.pos.gz" \
+        --max_kb_dist 10 \
+        --n_threads 16 \
+        --out "$POP.ld"
+done
+
+## Set up job environment:
+set -o errexit  # Exit the script on any error
+set -o nounset  # Treat any unset variables as an error
+
+module --quiet purge  # Reset the modules to the system default
+module load ngsLD/191108-GCC-8.2.0-2.31.1
+
+
+# create position files w/out headers from the beagle files
+# cuts off the first column, splits into two based on _, and separates with a tab
+zcat AR_A_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > AR_A.pos.gz
+zcat AR_B_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > AR_B.pos.gz
+zcat MO_A_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > MO_A.pos.gz
+zcat MO_B_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > MO_B.pos.gz
+zcat NJ_A_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > NJ_A.pos.gz
+zcat NJ_B_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > NJ_B.pos.gz
+zcat NY_A_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > NY_A.pos.gz
+zcat NY_B_filt.beagle.gz | cut -f 1 | cut -d "_" -f 1,2 --output-delimiter $'\t' | gzip > NY_B.pos.gz
+
+#remove header row from position file
+gunzip *pos.gz
+
+tail -n +2 AR_A.pos > AR_A.nh.pos
+tail -n +2 AR_B.pos > AR_B.nh.pos
+tail -n +2 MO_A.pos > MO_A.nh.pos
+tail -n +2 MO_B.pos > MO_B.nh.pos
+tail -n +2 NJ_A.pos > NJ_A.nh.pos
+tail -n +2 NJ_B.pos > NJ_B.nh.pos
+tail -n +2 NY_A.pos > NY_A.nh.pos
+tail -n +2 NY_B.pos > NY_B.nh.pos
+
+gzip *.pos
+
+# find the number of sites for each population
+sitesAR_A=$(zcat AR_A.nh.pos.gz | wc -l)
+sitesAR_B=$(zcat AR_B.nh.pos.gz | wc -l)
+sitesMO_A=$(zcat MO_A.nh.pos.gz | wc -l)
+sitesMO_B=$(zcat MO_B.nh.pos.gz | wc -l)
+sitesNJ_A=$(zcat NJ_A.nh.pos.gz | wc -l)
+sitesNJ_B=$(zcat NJ_B.nh.pos.gz | wc -l)
+sitesNY_A=$(zcat NY_A.nh.pos.gz | wc -l)
+sitesNY_B=$(zcat NY_B.nh.pos.gz | wc -l)
+
+# calculations
+# Can 40
+/local/opt/ngsLD/ngsLD --geno AR_A_filt.beagle.gz \
+	--probs \
+	--n_ind 34 \
+	--n_sites $sitesAR_A \
+	--pos AR_A.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out AR_A.ld
+
+# Can 14
+/local/opt/ngsLD/ngsLD --geno AR_B_filt.beagle.gz \
+	--probs \
+	--n_ind 26 \
+	--n_sites $sitesAR_B \
+	--pos AR_B.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out AR_B.ld
+
+# Lof 07
+/local/opt/ngsLD/ngsLD --geno MO_A_filt.beagle.gz \
+	--probs \
+	--n_ind 24 \
+	--n_sites $sitesMO_A \
+	--pos MO_A.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out MO_A.ld
+
+# Lof 11
+/local/opt/ngsLD/ngsLD --geno MO_B_filt.beagle.gz \
+	--probs \
+	--n_ind 45 \
+	--n_sites $sitesMO_B \
+	--pos MO_B.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out MO_B.ld
+
+# Lof 14
+/local/opt/ngsLD/ngsLD --geno NJ_A_filt.beagle.gz \
+	--probs \
+	--n_ind 27 \
+	--n_sites $sitesNJ_A \
+	--pos NJ_A.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out NJ_A.ld
+	
+/local/opt/ngsLD/ngsLD --geno NJ_B_filt.beagle.gz \
+	--probs \
+	--n_ind 29 \
+	--n_sites $sitesNJ_B \
+	--pos NJ_B.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out NJ_B.ld
+
+/local/opt/ngsLD/ngsLD --geno NY_A_filt.beagle.gz \
+	--probs \
+	--n_ind 30 \
+	--n_sites $sitesNY_A \
+	--pos NY_A.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out NY_A.ld
+
+/local/opt/ngsLD/ngsLD --geno NY_B_filt.beagle.gz \
+	--probs \
+	--n_ind 27 \
+	--n_sites $sitesNY_B \
+	--pos NY_B.nh.pos.gz \
+	--max_kb_dist 10 \
+	--n_threads 16 \
+	--out NY_B.ld
+	
+# compress the output to save space
+gzip AR*.ld
+gzip MO*.ld
+gzip NJ*.ld
+gzip NY*.ld
+
+
+
+##linkage disequilibrium decay plot
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(Rmisc)
+library(minpack.lm)
+summarySE()
+summary(full2)
+
+
+library(dplyr)
+library(ggplot2)
+library(Rmisc)
+library(patchwork)
+
+all_B.25m <- read.table("/local/home/robertk/sodalis/sodalisa1/LDnok/all_B.25m.ld", header = TRUE)
+all_A.25m <- read.table("/local/home/robertk/sodalis/sodalisa1/LDnok/all_A.25m.ld", header = TRUE)
+
+# Prepare B (pre-WNS, shown first)
+all_B.25m.bin <- all_B.25m %>%
+  mutate(disbin = cut(dist, breaks = c(0,100,500,1000,2000,5000,10000,20000,40000,100000)))
+tgc_B <- summarySE(all_B.25m.bin, measurevar="r2", groupvars=c("disbin"), conf.interval=0.95)
+tgc_B$dataset <- "pre-WNS"
+
+# Prepare A (post-WNS)
+all_A.25m.bin <- all_A.25m %>%
+  mutate(disbin = cut(dist, breaks = c(0,100,500,1000,2000,5000,10000,20000,40000,100000)))
+tgc_A <- summarySE(all_A.25m.bin, measurevar="r2", groupvars=c("disbin"), conf.interval=0.95)
+tgc_A$dataset <- "post-WNS"
+
+# Combine
+tgc_all <- bind_rows(tgc_B, tgc_A)
+
+# Force order: pre-WNS first, post-WNS second
+tgc_all$dataset <- factor(tgc_all$dataset, levels = c("pre-WNS", "post-WNS"))
+
+plot <- ggplot(tgc_all, aes(x = disbin, y = r2)) +
+  geom_errorbar(aes(ymin = r2 - ci, ymax = r2 + ci), width = 0.2) +
+  geom_point() +
+  geom_line(aes(group = 1)) +
+  facet_wrap(~dataset, nrow = 1) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(colour = "black")) +
+  labs(x = "Binned distance between SNPs (bp)", 
+       y = expression(r^2)) +
+  theme(axis.title = element_text(size = 16),
+        axis.text = element_text(size = 14),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave(filename = "/local/home/robertk/sodalis/sodalisa1/LDnok/all.com2.25m.LDdecay.png",
+       plot = plot, width = 16, height = 9, dpi = 300)
+
+
