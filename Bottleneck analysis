@@ -110,36 +110,10 @@ do echo $POP; tail -n +2 "$POP".pos > "$POP".nh.pos; done
 
 gzip *pos
 
-for POP in AR_A.25m AR_B.25m MO_A.25m MO_B.25m NJ_A.25m NJ_B.25m NY_A.25m NY_B.25m \
-           AR_A.75m AR_B.75m MO_A.75m MO_B.75m NJ_A.75m NJ_B.75m NY_A.75m NY_B.75m
-do
-    sitesall[$POP]=$(zcat "$POP.nh.pos.gz" | wc -l)
-done
 
-for POP in "${!sitesall[@]}"; do
-    echo "Running ngsLD for $POP with ${sitesall[$POP]} sites"
 
-    # choose the correct file for counting individuals
-    if [[ $POP == *.25m ]]; then
-        n_ind=$(wc -l < /local/home/robertk/sodalis/sodalisa1/bams/"$POP.imb.pco3.txt")
-    elif [[ $POP == *.75m ]]; then
-        n_ind=$(wc -l < /local/home/robertk/sodalis/sodalisa1/bams/"$POP.imb.pco.txt")
-    else
-        echo "Warning: $POP does not match expected pattern (.25m or .75m)"
-        continue
-    fi
 
-    /local/opt/ngsLD/ngsLD \
-        --geno "$POP.ld.beagle.gz" \
-        --probs \
-        --n_ind "$n_ind" \
-        --n_sites "${sitesall[$POP]}" \
-        --pos "$POP.nh.pos.gz" \
-        --max_kb_dist 10 \
-        --n_threads 16 \
-        --out "$POP.ld"
-done
-
+##calculate LD. From Pinsky et al., 2021
 ## Set up job environment:
 set -o errexit  # Exit the script on any error
 set -o nounset  # Treat any unset variables as an error
