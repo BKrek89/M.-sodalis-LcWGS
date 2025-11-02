@@ -1,0 +1,44 @@
+##########################################SNPs with changes in allele frequency greater than 5 standard deviations of the mean
+##state specific variant calls
+
+for POP in AR_B MO_B NJ_B NY_B; do echo $POP;/local/opt/angsd/angsd -b "$POP".25m.imb.pco3.txt -GL 1 -doMajorMinor 3 -doMaf 11 -doCounts 1 -dumpCounts 3 -minQ 20 -minMapQ 30 -P 30 
+-minInd 10 -setMaxDepth 390 -doSnpStat 1 -doHWE 1 -hwe_pval 0.0001 -rf /local/home/robertk/sodalis/sodalisa1/sites/chrs.imb.txt 
+-sites /local/home/robertk/sodalis/sodalisa1/sites/skno.new.imb.sites1.sorted.txt -out /local/home/robertk/sodalis/sodalisa1/mafpopnok/stringent/"$POP"_25m.stri; done
+
+for POP in AR_B MO_B NJ_B NY_B; do echo $POP;/local/opt/angsd/angsd -b "$POP".25m.imb.pco3.txt -GL 1 -doMajorMinor 3 -doMaf 11 -doCounts 1 -dumpCounts 3 -minQ 20 -minMapQ 30 
+-P 30 -setMaxDepth 390 -rf /local/home/robertk/sodalis/sodalisa1/sites/chrs.imb.txt 
+-sites /local/home/robertk/sodalis/sodalisa1/sites/skno.new.imb.sites1.sorted.txt -out /local/home/robertk/sodalis/sodalisa1/mafpopnok/lenient/"$POP"_25m.len; done
+
+##changes in allele frequency
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR_B_25m.len.mafs AR_A_25m.len.mafs > AR_A_25m.len.matched.mafs
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR_A_25m.len.matched.mafs AR_B_25m.len.mafs > AR_B_25m.len.matched.mafs
+
+cut -f1-5 AR_A_25m.len.matched.mafs > AR_A_25m.len.matched.cut.mafs
+
+sed -e '1s/chromo/chromoA/' -e '1s/position/positionA/' -e '1s/major/majorA/' -e '1s/minor/minorA/' -e '1s/knownEM/knownEMA/' AR_A_25m.len.matched.cut.mafs > AR_A_25m.len.matched.cut.name.mafs
+
+pr -mts' ' AR_B_25m.len.matched.mafs AR_A_25m.len.matched.cut.name.mafs > AR.25m.len.merged.mafs
+
+#file so.awk
+NR==1{print $0, "   diff.\n"}
+NR>2{printf("%s\t%15.6f\n", $0, $13-$5)}
+
+awk -f so.awk AR.25m.len.merged.mafs > AR.25m.len.merged.dif.mafs
+
+for POP in AR MO NJ NY; do
+    echo $POP
+    sed -E 's/-([^[:blank:]]+)$/ \1/' "$POP".25m.len.merged.dif.mafs > "$POP".25m.len.merged.dif.abs.mafs
+done
+
+
+awk 'NR>1 { sum += $14 } END { if (NR > 1) print sum/(NR-1) }' AR.25m.len.merged.dif.abs.mafs
+#standard deviation
+awk 'NR>1 { sum += $14; sumsq += ($14)^2 } END { n=NR-1; if (n > 1) print sqrt((sumsq - sum^2/n) / (n-1)) }' AR.25m.len.merged.dif.abs.mafs
+
+
+awk '(NR==1) || ($14 > mean+5std ) ' AR.25m.len.merged.dif.mafs > AR.25m.len.merged.dif.5sd.up.mafs
+awk '(NR==1) || ($14 < -mean+5std ) ' AR.25m.len.merged.dif.mafs > AR.25m.len.merged.dif.5sd.do.mafs
+
+##common among all quality iterations
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.len.merged.dif.5sd.up.mafs AR.25m.stri.merged.dif.up.mafs > AR.25m.snp.up.mafs
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.snp.up.mafs AR.75m.snp.up.mafs > AR.snp.up.mafs
