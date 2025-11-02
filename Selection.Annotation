@@ -1,0 +1,92 @@
+#################turn into bed files and prepare for intersection with bedtools
+for POP in AR MO NJ NY; do echo $POP; 
+awk 'NR>1 && $2>0 {start=$2-1; if(start<0) start=0; print $1, start, $2}' OFS='\t' "$POP".snp.txt | sort -k1,1 -k2,2n > /local/home/robertk/sodalis/sodalisa1/anno/"$POP".snp.sorted.bed; 
+done
+
+for POP in AR MO NJ NY; do echo $POP; grep -v "position" "$POP".snp.sorted.bed > "$POP".snp.gre.sorted.bed; done
+
+for POP in AR MO NJ NY; do echo $POP; awk 'NR>1 {print $1, $2-5001, $2+5000}' OFS='\t' "$POP".fst.10.5sd.txt > /local/home/robertk/sodalis/sodalisa1/anno/"$POP".fst.10.bed; done
+
+for POP in AR MO NJ NY; do echo $POP; awk 'NR>1 {print $1, $2-25001, $2+25000}' OFS='\t' "$POP".fst.50.5sd.txt > /local/home/robertk/sodalis/sodalisa1/anno/"$POP".fst.50.bed; done
+
+
+for POP in AR MO NJ NY; do echo $POP; awk 'NR>1 {print $1, $2-5001, $2+5000}' OFS='\t' "$POP".10.td.up.n.txt > /local/home/robertk/sodalis/sodalisa1/anno/"$POP".taj.10.bed; done
+
+for POP in AR MO NJ NY; do echo $POP; awk 'NR>1 {print $1, $2-25001, $2+25000}' OFS='\t' "$POP".50.td.up.n.txt > /local/home/robertk/sodalis/sodalisa1/anno/"$POP".taj.50.bed; done
+
+for POP in AR.snp MO.snp NJ.snp NY.snp AR.fst.10 MO.fst.10 NJ.fst.10 NY.fst.10 AR.fst.50 MO.fst.50 NJ.fst.50 NY.fst.50 AR.taj.10 NY.taj.10 AR.taj.50 NY.taj.50; do echo $POP; 
+sort -k1,1 -k2,2n "$POP".bed > "$POP".sorted.bed; done
+
+#if -1 in the first line of sorted file
+for POP in AR MO NJ NY; do echo $POP; tail -n +2 "$POP".snp.sorted.bed > "$POP".snp.nh.sorted.bed; done
+
+
+##############find intersection between outlier loci (SNP, Fst, Tajima's D) using bedtools. mylu.ann.geneid.bed is the bed format of the Myo_luc2.0 genome annotation file
+bedtools intersect -a snp.NY.t2.bed -b mylu.ann.geneid.bed -wa -wb > results/snp.NY.res.bed
+
+###only keep gene names for each
+for f in `ls -1 *.intersect.bed | sed 's/.intersect.bed//' `
+do
+awk '{print $7}' ${f}.intersect.bed > ${f}.gene.txt
+done
+
+##search for same genes among states for each analysis
+awk 'NR==FNR {a[$1]; next} $1 in a' AR.snp.gre.gene.txt MO.snp.gre.gene.txt > ARMO.snp.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' ARMO.snp.genes.txt NJ.snp.gre.gene.txt > ARMONJ.snp.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' ARMONJ.snp.genes.txt NY.snp.gre.gene.txt > ARMONJNY.snp.genes.txt
+
+
+awk 'NR==FNR {a[$1]; next} $1 in a' AR.fst.10.gene.txt MO.fst.10.gene.txt > ARMO.fst.10.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' ARMO.fst.10.genes.txt NJ.fst.10.gene.txt > ARMONJ.fst.10.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' ARMONJ.fst.10.genes.txt NY.fst.10.gene.txt > ARMONJNY.fst.10.genes.txt
+
+awk 'NR==FNR {a[$1]; next} $1 in a' AR.fst.50.gene.txt MO.fst.50.gene.txt > ARMO.fst.50.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' ARMO.fst.50.genes.txt NJ.fst.50.gene.txt > ARMONJ.fst.50.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' ARMONJ.fst.50.genes.txt NY.fst.50.gene.txt > ARMONJNY.fst.50.genes.txt
+
+
+##search for same genes among analyses within each state
+awk 'NR==FNR {a[$1]; next} $1 in a' AR.snp.gre.gene.txt AR.fst.10.gene.txt > AR.snp.fst10.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' AR.snp.fst10.genes.txt AR.fst.50.gene.txt > AR.snpfst.genes.txt
+
+awk 'NR==FNR {a[$1]; next} $1 in a' MO.snp.gre.gene.txt MO.fst.10.gene.txt > MO.snp.fst10.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' MO.snp.fst10.genes.txt MO.fst.50.gene.txt > MO.snpfst.genes.txt
+
+awk 'NR==FNR {a[$1]; next} $1 in a' NJ.snp.gre.gene.txt NJ.fst.10.gene.txt > NJ.snp.fst10.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' NJ.snp.fst10.genes.txt NJ.fst.50.gene.txt > NJ.snpfst.genes.txt
+
+awk 'NR==FNR {a[$1]; next} $1 in a' NY.snp.gre.gene.txt NY.fst.10.gene.txt > NY.snp.fst10.genes.txt
+awk 'NR==FNR {a[$1]; next} $1 in a' NY.snp.fst10.genes.txt NY.fst.50.gene.txt > NY.snpfst.genes.txt
+
+
+
+######################################################GO-term analysis
+##only unique genes for go-term
+sort file.txt | uniq > file_unique.txt
+for f in `ls -1 *.gene.txt | sed 's/.gene.txt//' `
+do
+sort ${f}.gene.txt | uniq > ${f}.gene.uni.txt
+done
+
+##paste each list of genes into g:profiler web browser application for GO-term analysis
+
+###look for matching GO-terms between analyses
+library(dplyr)
+
+# Perform an inner join to get only matching rows based on 'term_name'
+ARMOdf <- inner_join(AR.all.trun.goterm, MO.all.trun.goterm, by = "term_name")
+
+# View the resulting dataframe
+head(ARMOdf)
+nrow(ARMOdf)
+
+
+ARMONJdf <- inner_join(ARMOdf, NJ.all.trun.goterm, by = "term_name")
+
+
+ARMONJNYdf <- inner_join(ARMONJdf, NY.all.trun.goterm, by = "term_name")
+
+getwd()
+write.csv(ARMONJNYdf, file = "All.goterm.match.csv")
+
+nrow(ARMONJNYdf)
