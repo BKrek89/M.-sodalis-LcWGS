@@ -1,0 +1,237 @@
+#remove header row
+
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do echo $POP; tail -n +2 "$POP"_25m.len.mafs > /local/home/robertk/sodalis/sodalisa1/cmh/"$POP"._25m.len1.mafs; done
+
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do echo $POP; tail -n +2 "$POP"_75m.len.mafs > /local/home/robertk/sodalis/sodalisa1/cmh/"$POP"._75m.len1.mafs; done
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do echo $POP; tail -n +2 "$POP"_25m.stri.mafs > /local/home/robertk/sodalis/sodalisa1/cmh/"$POP"._25m.stri1.mafs; done
+
+for POP in AR_A MO_A NJ_A NY_A AR_B MO_B NJ_B NY_B; do echo $POP; tail -n +2 "$POP"_75m.stri.mafs > /local/home/robertk/sodalis/sodalisa1/cmh/"$POP"._75m.stri1.mafs; done
+
+#Set up and read in files, R
+R
+Library(ACER)
+Library(data.table)
+Library(dplyr)
+Library(fdrtool)
+Setwd(“/data/robertk/sodalis/smalleff”)
+kya=fread("KY_A_filt1.mafs", header=FALSE)
+kyb=fread("KY_B_filt1.mafs", header=FALSE)
+
+ara=fread("AR_A._25m.len1.mafs", header=FALSE)
+arb=fread("AR_B._25m.len1.mafs", header=FALSE)
+moa=fread("MO_A._25m.len1.mafs", header=FALSE)
+mob=fread("MO_B._25m.len1.mafs", header=FALSE)
+nja=fread("NJ_A._25m.len1.mafs", header=FALSE)
+njb=fread("NJ_B._25m.len1.mafs", header=FALSE)
+nya=fread("NY_A._25m.len1.mafs", header=FALSE)
+nyb=fread("NY_B._25m.len1.mafs", header=FALSE)
+
+
+colnames(ara)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_ARa", "Maf3_a", "nInd_ARa")
+colnames(arb)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_ARb", "Maf3_b", "nInd_ARb")
+colnames(moa)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_MOa", "Maf3_a", "nInd_MOa")
+colnames(mob)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_MOb", "Maf3_b", "nInd_MOb")
+colnames(nja)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_NJa", "Maf3_a", "nInd_NJa")
+colnames(njb)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_NJb", "Maf3_b", "nInd_NJb")
+colnames(nya)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_NYa", "Maf3_a", "nInd_NYa")
+colnames(nyb)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_NYb", "Maf3_b", "nInd_NYb")
+
+
+#Make file with major and minor alleles
+Majmin=cbind(ara$Scaffold, ara$Position, ara$Major, ara$Minor)
+colnames(majmin)=c("Scaffold", "SNP", "Major", "Minor")
+
+#Merge files
+arab=merge(ara, arb, by=c("Scaffold", "Position"))
+
+moab=merge(moa, mob, by=c("Scaffold", "Position"))
+njab=merge(nja, njb, by=c("Scaffold", "Position"))
+nyab=merge(nya, nyb, by=c("Scaffold", "Position"))
+
+moab2 <- moab[, -c(3, 4, 5, 7, 9, 10, 11, 13)]
+njab2 <- njab[, -c(3, 4, 5, 7, 9, 10, 11, 13)]
+nyab2 <- nyab[, -c(3, 4, 5, 7, 9, 10, 11, 13)]
+
+All=merge(arab, moab2, by=c("Scaffold", "Position"))
+All3=merge(All, njab2, by=c("Scaffold", "Position"))
+All4=merge(All3, nyab2, by=c("Scaffold", "Position"))
+
+All5=merge(All4, kyab, by=c("Scaffold", "Position"))
+
+#Make files for cmh test
+Mafs=cbind(All4$Maf2_ARb, All4$Maf2_ARa, All4$Maf2_MOb, All4$Maf2_MOa, All4$Maf2_NJb, All4$Maf2_NJa, All4$Maf2_NYb, All4$Maf2_NYa)
+covMat=cbind(All4$nInd_ARb, All4$nInd_ARa, All4$nInd_MOb, All4$nInd_MOa, All4$nInd_NJb, All4$nInd_NJa, All4$nInd_NYb, All4$nInd_NYa)
+#Make matrix numeric if necessary
+covmatn <- matrix(as.numeric(covmat), ncol = ncol(covmat), byrow = TRUE)
+
+#CMH test
+
+
+#generation time 6
+Ne=c(20000, 20000, 20000, 20000)
+Ne=c(1000, 1000, 1000, 1000)
+Ne=c(241, 42588, 82, 3131)
+Ne=c(121, 21294, 41, 1565)
+Ne=c(60, 10647, 20, 783)
+Ne=c(130, 146, 79, 172)
+
+repl=c(1,2,3,4)
+tp=c(0, 3.21)
+#generation time 3
+Ne=c(20000, 20000, 20000, 20000)
+Ne=c(1000, 1000, 1000, 1000)
+Ne=c(241, 42588, 82, 3131)
+Ne=c(121, 21294, 41, 1565)
+Ne=c(60, 10647, 20, 783)
+Ne=c(130, 146, 79, 172)
+
+repl=c(1,2,3,4)
+tp=c(0, 6)
+
+pvals=adapted.cmh.test(freq=Mafs, coverage=covMat, Ne=Ne, gen=tp, repl=repl)
+
+#Adjusting pvalues
+pvalsCMH.tot <- as.data.frame(cbind(All4$Scaffold, All4$Position, pvals))
+colnames(pvalsCMH.tot)=c("Scaffold", "SNP", "pvals")
+
+pvalsCMH.tot$pvals=as.numeric(as.character(pvalsCMH.tot$pvals))
+pvalsCMH.tot$padj=p.adjust(pvalsCMH.tot$pvals, method="fdr")
+sigcmh.tot <- filter(pvalsCMH.tot, padj <=.2)
+write.table(sigcmh.tot, file="/local/home/robertk/sodalis/sodalisa1/cmh/sigcmh.25m.len.gen3.JR.txt")
+write.table(pvalsCMH.tot, file="/local/home/robertk/sodalis/sodalisa1/cmh/allcmh.25m.len.gen3.JR.txt")
+
+
+#########################################for subpopulations
+
+#Set up and read in files, R
+R
+Library(ACER)
+Library(data.table)
+Library(dplyr)
+Library(fdrtool)
+Setwd(“/data/robertk/sodalis/smalleff”)
+kya=fread("KY_A_filt1.mafs", header=FALSE)
+kyb=fread("KY_B_filt1.mafs", header=FALSE)
+
+ara=fread("AR_A._25m.len1.mafs", header=FALSE)
+arb=fread("AR_B._25m.len1.mafs", header=FALSE)
+moa=fread("MO_A._25m.len1.mafs", header=FALSE)
+mob=fread("MO_B._25m.len1.mafs", header=FALSE)
+nja=fread("NJ_A._25m.len1.mafs", header=FALSE)
+njb=fread("NJ_B._25m.len1.mafs", header=FALSE)
+nya=fread("NY_A._25m.len1.mafs", header=FALSE)
+nyb=fread("NY_B._25m.len1.mafs", header=FALSE)
+
+
+colnames(ara)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_ARa", "Maf3_a", "nInd_ARa")
+colnames(arb)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_ARb", "Maf3_b", "nInd_ARb")
+colnames(moa)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_MOa", "Maf3_a", "nInd_MOa")
+colnames(mob)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_MOb", "Maf3_b", "nInd_MOb")
+colnames(nja)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_NJa", "Maf3_a", "nInd_NJa")
+colnames(njb)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_NJb", "Maf3_b", "nInd_NJb")
+colnames(nya)=c("Scaffold", "Position", "Major", "Minor", "Maf1_a", "Maf2_NYa", "Maf3_a", "nInd_NYa")
+colnames(nyb)=c("Scaffold", "Position", "Major", "Minor", "Maf1_b", "Maf2_NYb", "Maf3_b", "nInd_NYb")
+
+
+#Make file with major and minor alleles
+Majmin=cbind(ara$Scaffold, ara$Position, ara$Major, ara$Minor)
+colnames(Majmin)=c("Scaffold", "SNP", "Major", "Minor")
+
+#Merge files
+arab=merge(ara, arb, by=c("Scaffold", "Position"))
+
+moab=merge(moa, mob, by=c("Scaffold", "Position"))
+njab=merge(nja, njb, by=c("Scaffold", "Position"))
+nyab=merge(nya, nyb, by=c("Scaffold", "Position"))
+
+moab2 <- moab[, -c(3, 4, 5, 7, 9, 10, 11, 13)]
+njab2 <- njab[, -c(3, 4, 5, 7, 9, 10, 11, 13)]
+nyab2 <- nyab[, -c(3, 4, 5, 7, 9, 10, 11, 13)]
+
+All=merge(arab, moab2, by=c("Scaffold", "Position"))
+All3=merge(All, njab2, by=c("Scaffold", "Position"))
+All4=merge(All3, nyab2, by=c("Scaffold", "Position"))
+
+#############NE###############
+#CMH test
+neMafs=cbind(All4$Maf2_NJb, All4$Maf2_NJa, All4$Maf2_NYb, All4$Maf2_NYa)
+necovMat=cbind(All4$nInd_NJb, All4$nInd_NJa, All4$nInd_NYb, All4$nInd_NYa)
+
+
+#generation time 6
+Ne=c(20000, 20000)
+Ne=c(1000, 1000)
+Ne=c(82, 3131)
+Ne=c(41, 1565)
+Ne=c(20, 783)
+Ne=c(79, 172)
+
+repl=c(1,2)
+tp=c(0, 3.21)
+#generation time 3
+Ne=c(20000, 20000)
+Ne=c(1000, 1000)
+Ne=c(82, 3131)
+Ne=c(41, 1565)
+Ne=c(20, 783)
+Ne=c(159, 344)
+
+repl=c(1,2)
+tp=c(0, 6.42)
+
+
+pvals=adapted.cmh.test(freq=neMafs, coverage=necovMat, Ne=Ne, gen=tp, repl=repl)
+
+#Adjusting pvalues
+pvalsCMH.tot <- as.data.frame(cbind(All4$Scaffold, All4$Position, pvals))
+colnames(pvalsCMH.tot)=c("Scaffold", "SNP", "pvals")
+
+pvalsCMH.tot$pvals=as.numeric(as.character(pvalsCMH.tot$pvals))
+pvalsCMH.tot$padj=p.adjust(pvalsCMH.tot$pvals, method="fdr")
+sigcmh.tot <- filter(pvalsCMH.tot, padj <=.2)
+write.table(sigcmh.tot, file="/local/home/robertk/sodalis/sodalisa1/cmh/NE/sigcmh.NE.25m.len.gen3.20000.txt")
+
+
+
+############Ozarks######################################
+
+#Make files for cmh test
+
+ozMafs=cbind(All4$Maf2_ARb, All4$Maf2_ARa, All4$Maf2_MOb, All4$Maf2_MOa)
+ozcovMat=cbind(All4$nInd_ARb, All4$nInd_ARa, All4$nInd_MOb, All4$nInd_MOa)
+
+
+
+
+
+
+
+#generation time 6
+Ne=c(20000, 20000)
+Ne=c(1000, 1000)
+Ne=c(241, 42588)
+Ne=c(121, 21294)
+Ne=c(60, 10647)
+Ne=c(130, 146)
+
+
+repl=c(1,2)
+tp=c(0, 3.21)
+#generation time 3
+Ne=c(260, 292)
+
+repl=c(1,2)
+tp=c(0, 6.42)
+
+pvals=adapted.cmh.test(freq=ozMafs, coverage=ozcovMat, Ne=Ne, gen=tp, repl=repl)
+
+#Adjusting pvalues
+pvalsCMH.tot <- as.data.frame(cbind(All4$Scaffold, All4$Position, pvals))
+colnames(pvalsCMH.tot)=c("Scaffold", "SNP", "pvals")
+
+pvalsCMH.tot$pvals=as.numeric(as.character(pvalsCMH.tot$pvals))
+pvalsCMH.tot$padj=p.adjust(pvalsCMH.tot$pvals, method="fdr")
+sigcmh.tot <- filter(pvalsCMH.tot, padj <=.2)
+write.table(sigcmh.tot, file="/local/home/robertk/sodalis/sodalisa1/cmh/OZ/sigcmh.OZ.25m.len.gen3.20000.txt")
+
+write.table(sigcmh.tot, file="/local/home/robertk/sodalis/sodalisa1/cmh/OZ/allcmh.OZ.25m.len.gen3.20000.txt")
