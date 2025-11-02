@@ -1,0 +1,136 @@
+##########################################################SNPs with large changes in allele frequency#####################################################################################################
+##state specific variant calls
+
+for POP in AR_B MO_B NJ_B NY_B; do echo $POP;/local/opt/angsd/angsd -b "$POP".25m.imb.pco3.txt -GL 1 -doMajorMinor 3 -doMaf 11 -doCounts 1 -dumpCounts 3 -minQ 20 -minMapQ 30 -P 30 
+-minInd 10 -setMaxDepth 390 -doSnpStat 1 -doHWE 1 -hwe_pval 0.0001 -rf /local/home/robertk/sodalis/sodalisa1/sites/chrs.imb.txt 
+-sites /local/home/robertk/sodalis/sodalisa1/sites/skno.new.imb.sites1.sorted.txt -out /local/home/robertk/sodalis/sodalisa1/mafpopnok/stringent/"$POP"_25m.stri; done
+
+for POP in AR_B MO_B NJ_B NY_B; do echo $POP;/local/opt/angsd/angsd -b "$POP".25m.imb.pco3.txt -GL 1 -doMajorMinor 3 -doMaf 11 -doCounts 1 -dumpCounts 3 -minQ 20 -minMapQ 30 
+-P 30 -setMaxDepth 390 -rf /local/home/robertk/sodalis/sodalisa1/sites/chrs.imb.txt 
+-sites /local/home/robertk/sodalis/sodalisa1/sites/skno.new.imb.sites1.sorted.txt -out /local/home/robertk/sodalis/sodalisa1/mafpopnok/lenient/"$POP"_25m.len; done
+
+################################################changes greater than 5 standard deviations
+##changes in allele frequency
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR_B_25m.len.mafs AR_A_25m.len.mafs > AR_A_25m.len.matched.mafs
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR_A_25m.len.matched.mafs AR_B_25m.len.mafs > AR_B_25m.len.matched.mafs
+
+cut -f1-5 AR_A_25m.len.matched.mafs > AR_A_25m.len.matched.cut.mafs
+
+sed -e '1s/chromo/chromoA/' -e '1s/position/positionA/' -e '1s/major/majorA/' -e '1s/minor/minorA/' -e '1s/knownEM/knownEMA/' AR_A_25m.len.matched.cut.mafs > AR_A_25m.len.matched.cut.name.mafs
+
+pr -mts' ' AR_B_25m.len.matched.mafs AR_A_25m.len.matched.cut.name.mafs > AR.25m.len.merged.mafs
+
+#file so.awk
+NR==1{print $0, "   diff.\n"}
+NR>2{printf("%s\t%15.6f\n", $0, $13-$5)}
+
+awk -f so.awk AR.25m.len.merged.mafs > AR.25m.len.merged.dif.mafs
+
+for POP in AR MO NJ NY; do
+    echo $POP
+    sed -E 's/-([^[:blank:]]+)$/ \1/' "$POP".25m.len.merged.dif.mafs > "$POP".25m.len.merged.dif.abs.mafs
+done
+
+
+awk 'NR>1 { sum += $14 } END { if (NR > 1) print sum/(NR-1) }' AR.25m.len.merged.dif.abs.mafs
+#standard deviation
+awk 'NR>1 { sum += $14; sumsq += ($14)^2 } END { n=NR-1; if (n > 1) print sqrt((sumsq - sum^2/n) / (n-1)) }' AR.25m.len.merged.dif.abs.mafs
+
+
+awk '(NR==1) || ($14 > mean+5std ) ' AR.25m.len.merged.dif.mafs > AR.25m.len.merged.dif.5sd.up.mafs
+awk '(NR==1) || ($14 < -mean+5std ) ' AR.25m.len.merged.dif.mafs > AR.25m.len.merged.dif.5sd.do.mafs
+
+##common among all quality iterations
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.len.merged.dif.5sd.up.mafs AR.25m.stri.merged.dif.up.mafs > AR.25m.snp.up.mafs
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.snp.up.mafs AR.75m.snp.up.mafs > AR.snp.up.mafs
+
+##find common loci among all states. Within each quality iteration and among those present in all quality iterations. For up and down loci.
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.snp.up.mafs MO.snp.up.mafs > ARMO.snp.up.mafs
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.snp.up.mafs NJ.snp.up.mafs > ARMONJ.snp.up.mafs
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.snp.up.mafs NY.snp.up.mafs > ARMONJNY.snp.up.mafs
+
+####################################################################changes in the 99th percentile
+##in R. absolute value of snp changes. find 99th percentile
+# Read input data
+data.ar <- read.table("AR.75m.stri.merged.dif.abs.mafs", header = TRUE)
+data.mo <- read.table("MO.75m.stri.merged.dif.abs.mafs", header = TRUE)
+data.nj <- read.table("NJ.75m.stri.merged.dif.abs.mafs", header = TRUE)
+data.ny <- read.table("NY.75m.stri.merged.dif.abs.mafs", header = TRUE)
+# Calculate the 99th percentile of column 15
+threshold.ar <- quantile(data.ar$diff., 0.99)
+threshold.mo <- quantile(data.mo$diff., 0.99)
+threshold.nj <- quantile(data.nj$diff., 0.99)
+threshold.ny <- quantile(data.ny$diff., 0.99)
+# Filter rows based on the threshold
+filtered_data.ar <- data.ar[data.ar$diff. >= threshold.ar, ]
+filtered_data.mo <- data.mo[data.mo$diff. >= threshold.mo, ]
+filtered_data.nj <- data.nj[data.nj$diff. >= threshold.nj, ]
+filtered_data.ny <- data.ny[data.ny$diff. >= threshold.ny, ]
+
+# Write the filtered data to a new file
+write.table(filtered_data.ar, "AR.75m.stri.99p.dif.mafs", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(filtered_data.mo, "MO.75m.stri.99p.dif.mafs", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(filtered_data.nj, "NJ.75m.stri.99p.dif.mafs", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(filtered_data.ny, "NY.75m.stri.99p.dif.mafs", sep = "\t", quote = FALSE, row.names = FALSE)
+
+
+###in linux. find number shared
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.len.99p.dif.mafs MO.25m.len.99p.dif.mafs > ARMO.25m.len.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.25m.len.99p.match NJ.25m.len.99p.dif.mafs > ARMONJ.25m.len.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.25m.len.99p.match NY.25m.len.99p.dif.mafs > ARMONJNY.25m.len.99p.match
+
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.75m.len.99p.dif.mafs MO.75m.len.99p.dif.mafs > ARMO.75m.len.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.75m.len.99p.match NJ.75m.len.99p.dif.mafs > ARMONJ.75m.len.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.75m.len.99p.match NY.75m.len.99p.dif.mafs > ARMONJNY.75m.len.99p.match
+
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.stri.99p.dif.mafs MO.25m.stri.99p.dif.mafs > ARMO.25m.stri.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.25m.stri.99p.match NJ.25m.stri.99p.dif.mafs > ARMONJ.25m.stri.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.25m.stri.99p.match NY.25m.stri.99p.dif.mafs > ARMONJNY.25m.stri.99p.match
+
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.75m.stri.99p.dif.mafs MO.75m.stri.99p.dif.mafs > ARMO.75m.stri.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.75m.stri.99p.match NJ.75m.stri.99p.dif.mafs > ARMONJ.75m.stri.99p.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.75m.stri.99p.match NY.75m.stri.99p.dif.mafs > ARMONJNY.75m.stri.99p.match
+
+
+#find total number of shared snps
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.len.merged.dif.abs.mafs MO.25m.len.merged.dif.abs.mafs > ARMO.25m.len.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.25m.len.tot.match NJ.25m.len.merged.dif.abs.mafs > ARMONJ.25m.len.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.25m.len.tot.match NY.25m.len.merged.dif.abs.mafs > ARMONJNY.25m.len.tot.match
+
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.75m.len.merged.dif.abs.mafs MO.75m.len.merged.dif.abs.mafs > ARMO.75m.len.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.75m.len.tot.match NJ.75m.len.merged.dif.abs.mafs > ARMONJ.75m.len.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.75m.len.tot.match NY.75m.len.merged.dif.abs.mafs > ARMONJNY.75m.len.tot.match
+
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.25m.stri.merged.dif.abs.mafs MO.25m.stri.merged.dif.abs.mafs > ARMO.25m.stri.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.25m.stri.tot.match NJ.25m.stri.merged.dif.abs.mafs > ARMONJ.25m.stri.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.25m.stri.tot.match NY.25m.stri.merged.dif.abs.mafs > ARMONJNY.25m.stri.tot.match
+
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' AR.75m.stri.merged.dif.abs.mafs MO.75m.stri.merged.dif.abs.mafs > ARMO.75m.stri.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMO.75m.stri.tot.match NJ.75m.stri.merged.dif.abs.mafs > ARMONJ.75m.stri.tot.match
+awk 'FNR==NR{arr[$1,$2];next}(($1,$2) in arr)' ARMONJ.75m.stri.tot.match NY.75m.stri.merged.dif.abs.mafs > ARMONJNY.75m.stri.tot.match
+
+##hypergeometric distribution test. More shared SNPs than would be expected by chance?
+###25m lenient
+# Total number of SNPs in the group. shared total SNPs between all populations
+total_snps <- 5244913
+
+# Number of SNPs drawn in each of the 4 draws (replace with your actual data)
+snps_drawn <- c(52451, 52452, 52453, 52454)
+
+# Number of times to draw
+draws <- length(snps_drawn)
+
+# Number of specific SNPs to match
+specific_snps <- 15
+
+#phyper test
+probability <- 1
+for (i in 1:draws) {
+  probability <- probability * phyper(specific_snps - 1, total_snps, total_snps - specific_snps, snps_drawn[i], lower.tail = FALSE)
+}
+#print probability
+print(sprintf("%.10f", probability))
+
+
+
+
